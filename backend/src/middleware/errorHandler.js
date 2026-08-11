@@ -1,6 +1,7 @@
 import { errorResponse } from '../utils/apiResponse.js';
 
 export const errorHandler = (err, req, res, next) => {
+  console.error(`[ERROR] ${req.method} ${req.originalUrl} - ${err.message}`);
   console.error(err.stack);
 
   // If the error has already been sent, don't try to send it again

@@ -9,6 +9,8 @@ import todoRoutes from './src/routes/todoRoutes.js';
 import { errorHandler } from './src/middleware/errorHandler.js';
 import { successResponse, errorResponse } from './src/utils/apiResponse.js';
 
+import { requestLogger } from './src/middleware/loggerMiddleware.js';
+
 dotenv.config();
 
 const app = express();
@@ -16,6 +18,7 @@ const PORT = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(express.json());
+app.use(requestLogger);
 
 // Routes
 app.use('/api/users', userRoutes);
