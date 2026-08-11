@@ -1,0 +1,93 @@
+.premium-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: inherit;
+  font-weight: 500;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  position: relative;
+  overflow: hidden;
+}
+
+.premium-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Variants */
+.btn-primary {
+  background-color: var(--primary-blue);
+  color: #ffffff;
+  box-shadow: 0 4px 14px 0 rgba(59, 130, 246, 0.39);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: var(--primary-blue-hover);
+  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.23);
+  transform: translateY(-1px);
+}
+
+.btn-accent {
+  background-color: var(--accent-yellow);
+  color: var(--text-dark);
+  box-shadow: 0 4px 14px 0 rgba(250, 204, 21, 0.39);
+}
+
+.btn-accent:hover:not(:disabled) {
+  background-color: var(--accent-yellow-hover);
+  box-shadow: 0 6px 20px rgba(250, 204, 21, 0.23);
+  transform: translateY(-1px);
+}
+
+.btn-ghost {
+  background-color: transparent;
+  color: var(--text-main);
+  border: 1px solid var(--border);
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background-color: var(--surface-color-light);
+  border-color: var(--border-highlight);
+}
+
+/* Sizes */
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 0.875rem;
+}
+
+.btn-md {
+  padding: 10px 18px;
+  font-size: 1rem;
+}
+
+.btn-lg {
+  padding: 14px 24px;
+  font-size: 1.125rem;
+}
+
+.btn-full {
+  width: 100%;
+}
+
+/* Loading Spinner */
+.spinner {
+  width: 1.2em;
+  height: 1.2em;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: #fff;
+  animation: spin 0.8s ease-in-out infinite;
+}
+
+.btn-accent .spinner {
+  border-color: rgba(17, 24, 39, 0.3);
+  border-top-color: var(--text-dark);
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

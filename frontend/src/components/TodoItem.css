@@ -1,0 +1,127 @@
+.todo-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  margin-bottom: 0.75rem;
+  transition: all 0.2s ease;
+}
+
+.todo-item:hover {
+  transform: translateX(4px);
+  border-color: var(--border-highlight);
+}
+
+.todo-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  flex: 1;
+}
+
+.todo-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.todo-title {
+  font-size: 1.05rem;
+  font-weight: 500;
+  color: var(--text-main);
+  margin-bottom: 0.1rem;
+  transition: color 0.2s ease;
+}
+
+.todo-description {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+/* Completed State */
+.todo-completed .todo-title {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+.todo-completed .todo-description {
+  opacity: 0.6;
+}
+
+/* Actions */
+.todo-actions {
+  display: flex;
+  gap: 0.5rem;
+  opacity: 0.3;
+  transition: opacity 0.2s ease;
+}
+
+.todo-item:hover .todo-actions {
+  opacity: 1;
+}
+
+.btn-delete {
+  color: var(--error) !important;
+}
+.btn-delete:hover {
+  background-color: rgba(239, 68, 68, 0.1) !important;
+  border-color: rgba(239, 68, 68, 0.3) !important;
+}
+
+/* Custom Checkbox */
+.todo-checkbox-container {
+  display: block;
+  position: relative;
+  padding-left: 24px;
+  cursor: pointer;
+  user-select: none;
+  margin-top: 2px;
+}
+
+.todo-checkbox {
+  position: absolute;
+  opacity: 0;
+  cursor: pointer;
+  height: 0;
+  width: 0;
+}
+
+.checkmark {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 20px;
+  width: 20px;
+  background-color: transparent;
+  border: 2px solid var(--border);
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.todo-item:hover .checkmark {
+  border-color: var(--primary-blue-glow);
+}
+
+.todo-checkbox:checked ~ .checkmark {
+  background-color: var(--primary-blue);
+  border-color: var(--primary-blue);
+}
+
+.checkmark:after {
+  content: "";
+  position: absolute;
+  display: none;
+}
+
+.todo-checkbox:checked ~ .checkmark:after {
+  display: block;
+}
+
+.todo-checkbox-container .checkmark:after {
+  left: 6px;
+  top: 2px;
+  width: 4px;
+  height: 10px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
