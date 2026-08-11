@@ -3,15 +3,32 @@ import { successResponse, errorResponse } from '../utils/apiResponse.js';
 
 // Create Todo
 export const createTodo = async (req, res, next) => {
-  const { userId, title, description, dueAt } = req.body;
+  const { userId, title, description, dueAt, actionId } = req.body;
   try {
     if (!userId || !title) {
       return res.status(400).json(errorResponse('userId and title are required', 'VALIDATION_ERROR'));
     }
 
+    if (actionId) {
+      // Check for idempotency
+      const [existing] = await db.query('SELECT * FROM todos WHERE action_id = ?', [actionId]);
+      if (existing.length > 0) {
+        return res.status(200).json(successResponse('Todo created successfully (idempotent)', {
+          id: existing[0].id,
+          userId: existing[0].user_id,
+          title: existing[0].title,
+          description: existing[0].description,
+          isCompleted: Boolean(existing[0].is_completed),
+          dueAt: existing[0].due_at,
+          createdAt: existing[0].created_at,
+          updatedAt: existing[0].updated_at
+        }));
+      }
+    }
+
     const [result] = await db.query(
-      'INSERT INTO todos (user_id, title, description, due_at) VALUES (?, ?, ?, ?)',
-      [userId, title, description || null, dueAt || null]
+      'INSERT INTO todos (user_id, title, description, due_at, action_id) VALUES (?, ?, ?, ?, ?)',
+      [userId, title, description || null, dueAt || null, actionId || null]
     );
 
     res.status(201).json(
