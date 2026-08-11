@@ -1,6 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import swaggerUi from 'swagger-ui-express';
+import { swaggerSpec } from './src/docs/swagger.js';
 import db from './src/config/db.js';
 import userRoutes from './src/routes/userRoutes.js';
 import todoRoutes from './src/routes/todoRoutes.js';
@@ -19,7 +21,19 @@ app.use(express.json());
 app.use('/api/users', userRoutes);
 app.use('/api/todos', todoRoutes);
 
-// Test Route: Check server health and DB connectivity
+// Swagger Documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
+/**
+ * @swagger
+ * /api/health:
+ *   get:
+ *     summary: API Health Check
+ *     description: Returns the health status of the server and database connection.
+ *     responses:
+ *       200:
+ *         description: Server is healthy and connected to the database.
+ */
 app.get('/api/health', async (req, res, next) => {
   try {
     // Run a simple query to verify MySQL connection

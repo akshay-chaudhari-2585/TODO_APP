@@ -4,6 +4,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import TaskForm from './pages/TaskForm';
 
 function App() {
   return (
@@ -13,6 +14,16 @@ function App() {
           <Route path="/" element={
             <ProtectedRoute>
               <Home />
+            </ProtectedRoute>
+          } />
+          <Route path="/task/new" element={
+            <ProtectedRoute>
+              <TaskForm />
+            </ProtectedRoute>
+          } />
+          <Route path="/task/:id" element={
+            <ProtectedRoute>
+              <TaskForm />
             </ProtectedRoute>
           } />
           <Route path="/login" element={<Login />} />

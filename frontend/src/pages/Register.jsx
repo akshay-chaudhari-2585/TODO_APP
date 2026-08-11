@@ -36,41 +36,38 @@ const Register = () => {
   };
 
   return (
-    <div style={{ 
-      display: 'flex', 
-      justifyContent: 'center', 
-      alignItems: 'center', 
-      minHeight: '100vh', 
-      padding: '1rem',
-      background: 'radial-gradient(circle at top, var(--surface-color-light) 0%, var(--bg-color) 40%)'
-    }}>
-      <Card padding="lg" style={{ width: '100%', maxWidth: '440px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }}>
-        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-          <h2 style={{ fontSize: '1.75rem', marginBottom: '0.5rem' }}>Create Account</h2>
+    <div className="auth-container">
+      <Card padding="lg" className="auth-card" style={{ maxWidth: '460px' }}>
+        <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
+          <h2 style={{ fontSize: '1.875rem', marginBottom: '0.5rem', fontWeight: '700' }}>Create Account</h2>
           <p style={{ color: 'var(--text-muted)' }}>Get started with your free account</p>
         </div>
         
         {error && (
-          <div style={{ padding: '0.875rem', marginBottom: '1.5rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'var(--error)', borderRadius: '8px', fontSize: '0.9rem', textAlign: 'center' }}>
+          <div style={{ padding: '1rem', marginBottom: '1.5rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'var(--error)', borderRadius: '8px', fontSize: '0.9rem', textAlign: 'center', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
             {error}
           </div>
         )}
 
         <form onSubmit={handleSubmit}>
           <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.25rem' }}>
-            <Input 
-              label="First Name" 
-              placeholder="Alex" 
-              value={firstName}
-              onChange={(e) => setFirstName(e.target.value)}
-              required
-            />
-            <Input 
-              label="Last Name" 
-              placeholder="Doe" 
-              value={lastName}
-              onChange={(e) => setLastName(e.target.value)}
-            />
+            <div style={{ flex: 1 }}>
+              <Input 
+                label="First Name" 
+                placeholder="Alex" 
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                required
+              />
+            </div>
+            <div style={{ flex: 1 }}>
+              <Input 
+                label="Last Name" 
+                placeholder="Doe" 
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+              />
+            </div>
           </div>
           <div style={{ marginBottom: '1.25rem' }}>
             <Input 
@@ -82,7 +79,7 @@ const Register = () => {
               required
             />
           </div>
-          <div style={{ marginBottom: '1.5rem' }}>
+          <div style={{ marginBottom: '2rem' }}>
             <Input 
               label="Password" 
               type="password" 
@@ -99,8 +96,8 @@ const Register = () => {
           </Button>
         </form>
         
-        <p style={{ textAlign: 'center', marginTop: '2rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
-          Already have an account? <Link to="/login" style={{ fontWeight: '500' }}>Sign in</Link>
+        <p style={{ textAlign: 'center', marginTop: '2rem', fontSize: '0.95rem', color: 'var(--text-muted)' }}>
+          Already have an account? <Link to="/login" style={{ color: 'var(--primary-blue)', fontWeight: '600' }}>Sign in</Link>
         </p>
       </Card>
     </div>

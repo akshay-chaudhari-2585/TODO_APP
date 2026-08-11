@@ -34,22 +34,15 @@ const Login = () => {
   };
 
   return (
-    <div style={{ 
-      display: 'flex', 
-      justifyContent: 'center', 
-      alignItems: 'center', 
-      minHeight: '100vh', 
-      padding: '1rem',
-      background: 'radial-gradient(circle at top, var(--surface-color-light) 0%, var(--bg-color) 40%)'
-    }}>
-      <Card padding="lg" style={{ width: '100%', maxWidth: '400px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }}>
-        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-          <h2 style={{ fontSize: '1.75rem', marginBottom: '0.5rem' }}>Welcome Back</h2>
+    <div className="auth-container">
+      <Card padding="lg" className="auth-card">
+        <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
+          <h2 style={{ fontSize: '1.875rem', marginBottom: '0.5rem', fontWeight: '700' }}>Welcome Back</h2>
           <p style={{ color: 'var(--text-muted)' }}>Sign in to manage your tasks</p>
         </div>
         
         {error && (
-          <div style={{ padding: '0.875rem', marginBottom: '1.5rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'var(--error)', borderRadius: '8px', fontSize: '0.9rem', textAlign: 'center' }}>
+          <div style={{ padding: '1rem', marginBottom: '1.5rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'var(--error)', borderRadius: '8px', fontSize: '0.9rem', textAlign: 'center', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
             {error}
           </div>
         )}
@@ -65,7 +58,7 @@ const Login = () => {
               required
             />
           </div>
-          <div style={{ marginBottom: '1.5rem' }}>
+          <div style={{ marginBottom: '2rem' }}>
             <Input 
               label="Password" 
               type="password" 
@@ -81,8 +74,8 @@ const Login = () => {
           </Button>
         </form>
         
-        <p style={{ textAlign: 'center', marginTop: '2rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
-          Don't have an account? <Link to="/register" style={{ fontWeight: '500' }}>Sign up</Link>
+        <p style={{ textAlign: 'center', marginTop: '2rem', fontSize: '0.95rem', color: 'var(--text-muted)' }}>
+          Don't have an account? <Link to="/register" style={{ color: 'var(--primary-blue)', fontWeight: '600' }}>Sign up</Link>
         </p>
       </Card>
     </div>

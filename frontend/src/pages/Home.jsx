@@ -1,17 +1,17 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../api';
 import Card from '../components/Card';
 import Button from '../components/Button';
 import TodoItem from '../components/TodoItem';
-import TodoForm from '../components/TodoForm';
 
 const Home = () => {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [todos, setTodos] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [editingTodo, setEditingTodo] = useState(null);
 
   useEffect(() => {
     fetchTodos();
@@ -29,30 +29,6 @@ const Home = () => {
       console.error(err);
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const handleCreateTodo = async (todoData) => {
-    try {
-      const response = await api.post('/todos', { ...todoData, userId: user.id });
-      if (response.data.success) {
-        // Optimistically add to state, or just fetch again. Fetching is safer for correct IDs/dates.
-        await fetchTodos();
-      }
-    } catch (err) {
-      console.error('Failed to create todo', err);
-    }
-  };
-
-  const handleUpdateTodo = async (todoData) => {
-    try {
-      const response = await api.put(`/todos/${editingTodo.id}`, todoData);
-      if (response.data.success) {
-        setEditingTodo(null);
-        await fetchTodos();
-      }
-    } catch (err) {
-      console.error('Failed to update todo', err);
     }
   };
 
@@ -82,49 +58,83 @@ const Home = () => {
     }
   };
 
+  const handleEditTodo = (todo) => {
+    navigate(`/task/${todo.id}`, { state: { todo } });
+  };
+
+  const completedCount = todos.filter(t => t.isCompleted).length;
+  const totalCount = todos.length;
+  const progress = totalCount === 0 ? 0 : Math.round((completedCount / totalCount) * 100);
+
   return (
     <div style={{ padding: '2rem 1rem', maxWidth: '900px', margin: '0 auto' }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3rem' }}>
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem' }}>
         <div>
-          <h1 style={{ fontSize: '2rem', marginBottom: '0.25rem' }}>Dashboard</h1>
-          <p style={{ color: 'var(--text-muted)' }}>Welcome back, {user?.firstName}!</p>
+          <h1 style={{ fontSize: '2.25rem', marginBottom: '0.25rem', fontWeight: '700' }}>Dashboard</h1>
+          <p style={{ color: 'var(--text-muted)' }}>Welcome back, <span style={{ color: 'var(--text-main)', fontWeight: '600' }}>{user?.firstName}</span>!</p>
         </div>
-        <div>
+        <div style={{ display: 'flex', gap: '1rem' }}>
+          <Button variant="primary" onClick={() => navigate('/task/new')}>+ Create Task</Button>
           <Button variant="ghost" onClick={logout}>Logout</Button>
         </div>
       </header>
 
-      {editingTodo ? (
-        <TodoForm 
-          initialData={editingTodo} 
-          onSubmit={handleUpdateTodo} 
-          onCancel={() => setEditingTodo(null)} 
-        />
-      ) : (
-        <TodoForm onSubmit={handleCreateTodo} />
-      )}
+      {/* Stats Section */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', marginBottom: '2.5rem' }}>
+        <Card padding="md" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderLeft: '4px solid var(--primary-blue)' }}>
+          <div>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Tasks</p>
+            <h2 style={{ fontSize: '2rem', margin: 0 }}>{totalCount}</h2>
+          </div>
+        </Card>
+        
+        <Card padding="md" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderLeft: '4px solid var(--success)' }}>
+          <div>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Completed</p>
+            <h2 style={{ fontSize: '2rem', margin: 0 }}>{completedCount}</h2>
+          </div>
+        </Card>
 
-      {error && <div style={{ color: 'var(--error)', marginBottom: '1rem' }}>{error}</div>}
+        <Card padding="md" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderLeft: '4px solid var(--accent-yellow)' }}>
+          <div style={{ width: '100%' }}>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Progress</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <div style={{ flex: 1, height: '8px', backgroundColor: 'var(--surface-color-light)', borderRadius: '4px', overflow: 'hidden' }}>
+                <div style={{ width: `${progress}%`, height: '100%', backgroundColor: 'var(--accent-yellow)', transition: 'width 0.5s ease' }}></div>
+              </div>
+              <span style={{ fontWeight: '600', fontSize: '1.125rem' }}>{progress}%</span>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {error && <div style={{ color: 'var(--error)', marginBottom: '1rem', padding: '1rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', borderRadius: '8px' }}>{error}</div>}
 
       <Card padding="md">
-        <h2 style={{ marginBottom: '1.5rem', fontSize: '1.25rem' }}>Your Tasks</h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid var(--border)', paddingBottom: '1rem' }}>
+          <h2 style={{ fontSize: '1.25rem', fontWeight: '600', margin: 0 }}>Your Tasks</h2>
+        </div>
         
         {isLoading ? (
-          <p style={{ color: 'var(--text-muted)' }}>Loading tasks...</p>
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}>
+            <p style={{ color: 'var(--text-muted)' }}>Loading tasks...</p>
+          </div>
         ) : todos.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-muted)' }}>
-            <p style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>You have no tasks yet.</p>
-            <p style={{ fontSize: '0.9rem' }}>Add a new task above to get started!</p>
+          <div style={{ textAlign: 'center', padding: '4rem 2rem', color: 'var(--text-muted)', border: '2px dashed var(--border)', borderRadius: '8px' }}>
+            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📝</div>
+            <p style={{ fontSize: '1.25rem', marginBottom: '0.5rem', color: 'var(--text-main)', fontWeight: '500' }}>You have no tasks yet.</p>
+            <p style={{ fontSize: '0.95rem', marginBottom: '1.5rem' }}>Get started by creating your first task to stay organized.</p>
+            <Button variant="primary" onClick={() => navigate('/task/new')}>Create Your First Task</Button>
           </div>
         ) : (
-          <div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             {todos.map(todo => (
               <TodoItem 
                 key={todo.id} 
                 todo={todo} 
                 onToggle={handleToggleComplete}
                 onDelete={handleDeleteTodo}
-                onEdit={setEditingTodo}
+                onEdit={handleEditTodo}
               />
             ))}
           </div>
