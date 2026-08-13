@@ -85,6 +85,11 @@ export const toggleUserStatus = async (req, res, next) => {
           where: { user_id: BigInt(id), is_revoked: false },
           data: { is_revoked: true }
         });
+        
+        const io = req.app.get('io');
+        if (io) {
+          io.emit('account_blocked', { userId: id.toString() });
+        }
       }
 
       res.status(200).json(

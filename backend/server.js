@@ -20,7 +20,8 @@ const server = createServer(app);
 const PORT = process.env.PORT || 5000;
 
 // Initialize Socket.io Game Server
-initGameServer(server);
+const io = initGameServer(server);
+app.set('io', io);
 
 app.use(cors());
 app.use(express.json());
