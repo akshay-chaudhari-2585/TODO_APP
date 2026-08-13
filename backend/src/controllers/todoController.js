@@ -11,33 +11,41 @@ export const createTodo = async (req, res, next) => {
 
     if (actionId) {
       // Check for idempotency
-      const [existing] = await db.query('SELECT * FROM todos WHERE action_id = ?', [actionId]);
-      if (existing.length > 0) {
+      const existing = await db.todos.findUnique({
+        where: { action_id: actionId }
+      });
+      
+      if (existing) {
         return res.status(200).json(successResponse('Todo created successfully (idempotent)', {
-          id: existing[0].id,
-          userId: existing[0].user_id,
-          title: existing[0].title,
-          description: existing[0].description,
-          isCompleted: Boolean(existing[0].is_completed),
-          dueAt: existing[0].due_at,
-          createdAt: existing[0].created_at,
-          updatedAt: existing[0].updated_at
+          id: existing.id.toString(),
+          userId: existing.user_id.toString(),
+          title: existing.title,
+          description: existing.description,
+          isCompleted: Boolean(existing.is_completed),
+          dueAt: existing.due_at,
+          createdAt: existing.created_at,
+          updatedAt: existing.updated_at
         }));
       }
     }
 
-    const [result] = await db.query(
-      'INSERT INTO todos (user_id, title, description, due_at, action_id) VALUES (?, ?, ?, ?, ?)',
-      [userId, title, description || null, dueAt || null, actionId || null]
-    );
+    const todo = await db.todos.create({
+      data: {
+        user_id: BigInt(userId),
+        title,
+        description: description || null,
+        due_at: dueAt || null,
+        action_id: actionId || null
+      }
+    });
 
     res.status(201).json(
       successResponse('Todo created successfully', {
-        id: result.insertId,
-        userId,
-        title,
-        description: description || null,
-        dueAt: dueAt || null
+        id: todo.id.toString(),
+        userId: todo.user_id.toString(),
+        title: todo.title,
+        description: todo.description,
+        dueAt: todo.due_at
       })
     );
   } catch (error) {
@@ -49,14 +57,14 @@ export const createTodo = async (req, res, next) => {
 export const getTodosByUser = async (req, res, next) => {
   const { userId } = req.params;
   try {
-    const [todos] = await db.query(
-      'SELECT * FROM todos WHERE user_id = ? ORDER BY created_at DESC',
-      [userId]
-    );
+    const todos = await db.todos.findMany({
+      where: { user_id: BigInt(userId) },
+      orderBy: { created_at: 'desc' }
+    });
     
     const mappedTodos = todos.map(t => ({
-      id: t.id,
-      userId: t.user_id,
+      id: t.id.toString(),
+      userId: t.user_id.toString(),
       title: t.title,
       description: t.description,
       isCompleted: Boolean(t.is_completed),
@@ -76,26 +84,26 @@ export const updateTodo = async (req, res, next) => {
   const { id } = req.params;
   const { title, description, isCompleted, dueAt } = req.body;
   try {
-    // Dynamically build the update query
-    const updates = [];
-    const values = [];
+    const updateData = {};
+    if (title !== undefined) updateData.title = title;
+    if (description !== undefined) updateData.description = description;
+    if (isCompleted !== undefined) updateData.is_completed = isCompleted;
+    if (dueAt !== undefined) updateData.due_at = dueAt;
 
-    if (title !== undefined) { updates.push('title = ?'); values.push(title); }
-    if (description !== undefined) { updates.push('description = ?'); values.push(description); }
-    if (isCompleted !== undefined) { updates.push('is_completed = ?'); values.push(isCompleted); }
-    if (dueAt !== undefined) { updates.push('due_at = ?'); values.push(dueAt); }
-
-    if (updates.length === 0) {
+    if (Object.keys(updateData).length === 0) {
       return res.status(400).json(errorResponse('No fields to update', 'VALIDATION_ERROR'));
     }
 
-    values.push(id);
-    const query = `UPDATE todos SET ${updates.join(', ')} WHERE id = ?`;
-    
-    const [result] = await db.query(query, values);
-
-    if (result.affectedRows === 0) {
-      return res.status(404).json(errorResponse('Todo not found', 'TODO_NOT_FOUND'));
+    try {
+      await db.todos.update({
+        where: { id: BigInt(id) },
+        data: updateData
+      });
+    } catch (e) {
+      if (e.code === 'P2025') { // Record to update not found
+        return res.status(404).json(errorResponse('Todo not found', 'TODO_NOT_FOUND'));
+      }
+      throw e;
     }
 
     res.status(200).json(successResponse('Todo updated successfully'));
@@ -108,10 +116,15 @@ export const updateTodo = async (req, res, next) => {
 export const deleteTodo = async (req, res, next) => {
   const { id } = req.params;
   try {
-    const [result] = await db.query('DELETE FROM todos WHERE id = ?', [id]);
-
-    if (result.affectedRows === 0) {
-      return res.status(404).json(errorResponse('Todo not found', 'TODO_NOT_FOUND'));
+    try {
+      await db.todos.delete({
+        where: { id: BigInt(id) }
+      });
+    } catch (e) {
+      if (e.code === 'P2025') { // Record to delete not found
+        return res.status(404).json(errorResponse('Todo not found', 'TODO_NOT_FOUND'));
+      }
+      throw e;
     }
 
     res.status(200).json(successResponse('Todo deleted successfully'));

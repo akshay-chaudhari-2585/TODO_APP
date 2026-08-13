@@ -18,6 +18,8 @@ const Home = () => {
   }, [user]);
 
   const fetchTodos = async () => {
+    if (!user || !user.id) return;
+
     try {
       setIsLoading(true);
       const response = await api.get(`/todos/user/${user.id}`);
@@ -74,6 +76,10 @@ const Home = () => {
           <p style={{ color: 'var(--text-muted)' }}>Welcome back, <span style={{ color: 'var(--text-main)', fontWeight: '600' }}>{user?.firstName}</span>!</p>
         </div>
         <div style={{ display: 'flex', gap: '1rem' }}>
+          {user?.role === 'ADMIN' && (
+            <Button variant="secondary" onClick={() => navigate('/admin')}>Admin Panel</Button>
+          )}
+          <Button variant="ghost" onClick={() => navigate('/game')} style={{ color: '#fbbf24', borderColor: '#fbbf24' }}>🎮 Mini-Game</Button>
           <Button variant="primary" onClick={() => navigate('/task/new')}>+ Create Task</Button>
           <Button variant="ghost" onClick={logout}>Logout</Button>
         </div>

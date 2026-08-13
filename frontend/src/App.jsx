@@ -5,6 +5,9 @@ import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import TaskForm from './pages/TaskForm';
+import AdminRoute from './components/AdminRoute';
+import AdminDashboard from './pages/AdminDashboard';
+import Game from './pages/Game';
 
 function App() {
   return (
@@ -24,6 +27,16 @@ function App() {
           <Route path="/task/:id" element={
             <ProtectedRoute>
               <TaskForm />
+            </ProtectedRoute>
+          } />
+          <Route path="/admin" element={
+            <AdminRoute>
+              <AdminDashboard />
+            </AdminRoute>
+          } />
+          <Route path="/game" element={
+            <ProtectedRoute>
+              <Game />
             </ProtectedRoute>
           } />
           <Route path="/login" element={<Login />} />

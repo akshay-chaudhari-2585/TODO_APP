@@ -14,6 +14,15 @@ const Login = () => {
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
 
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('error') === 'account_suspended') {
+      setError('Your session was terminated because your account has been suspended by an administrator.');
+      // Remove query param without refreshing
+      window.history.replaceState({}, '', '/login');
+    }
+  }, []);
+
   // If already logged in, redirect to dashboard
   if (user) {
     return <Navigate to="/" replace />;

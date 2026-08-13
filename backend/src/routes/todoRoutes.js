@@ -2,6 +2,11 @@ import express from 'express';
 import { createTodo, getTodosByUser, updateTodo, deleteTodo } from '../controllers/todoController.js';
 
 const router = express.Router();
+import { protect } from '../middleware/authMiddleware.js';
+import { validate } from '../middleware/validate.js';
+import { createTodoSchema, updateTodoSchema } from '../validators/schemas.js';
+
+router.use(protect);
 
 /**
  * @swagger
@@ -21,27 +26,18 @@ const router = express.Router();
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             required:
- *               - userId
- *               - title
- *             properties:
- *               userId:
- *                 type: integer
- *               title:
- *                 type: string
- *               description:
- *                 type: string
- *               dueAt:
- *                 type: string
- *                 format: date-time
+ *             $ref: '#/components/schemas/CreateTodoRequest'
  *     responses:
  *       201:
  *         description: Todo created successfully
  *       400:
- *         description: Validation error
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ *       500:
+ *         $ref: '#/components/responses/ServerError'
  */
-router.post('/', createTodo);
+router.post('/', validate(createTodoSchema), createTodo);
 
 /**
  * @swagger
@@ -80,24 +76,20 @@ router.get('/user/:userId', getTodosByUser);
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             properties:
- *               title:
- *                 type: string
- *               description:
- *                 type: string
- *               isCompleted:
- *                 type: boolean
- *               dueAt:
- *                 type: string
- *                 format: date-time
+ *             $ref: '#/components/schemas/UpdateTodoRequest'
  *     responses:
  *       200:
  *         description: Todo updated successfully
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
  *       404:
  *         description: Todo not found
+ *       500:
+ *         $ref: '#/components/responses/ServerError'
  */
-router.put('/:id', updateTodo);
+router.put('/:id', validate(updateTodoSchema), updateTodo);
 
 /**
  * @swagger

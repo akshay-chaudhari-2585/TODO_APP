@@ -13,7 +13,9 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const storedUser = localStorage.getItem('todo_user');
     if (storedUser) {
-      setUser(JSON.parse(storedUser));
+      const parsed = JSON.parse(storedUser);
+      // Ensure backward compatibility if they have old state vs new state
+      setUser(parsed.user ? parsed.user : parsed);
     }
     setLoading(false);
   }, []);
@@ -22,9 +24,14 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await api.post('/users/login', { email, password });
       if (response.data.success) {
-        const userData = response.data.data;
+        // Backend returns { user: {...}, tokens: {...} }
+        const { user: userData, tokens } = response.data.data;
+        
+        // Store the combined object in localStorage for interceptors
+        localStorage.setItem('todo_user', JSON.stringify({ user: userData, tokens }));
+        
+        // Set just the user data in state for components to use easily
         setUser(userData);
-        localStorage.setItem('todo_user', JSON.stringify(userData));
         return { success: true };
       }
     } catch (error) {

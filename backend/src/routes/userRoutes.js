@@ -1,5 +1,8 @@
 import express from 'express';
-import { registerUser, loginUser, getUsers } from '../controllers/userController.js';
+import { registerUser, loginUser, getUsers, refreshTokens, logoutUser, getUserDashboard } from '../controllers/userController.js';
+import { protect, restrictTo } from '../middleware/authMiddleware.js';
+import { validate } from '../middleware/validate.js';
+import { loginSchema, registerSchema } from '../validators/schemas.js';
 
 const router = express.Router();
 
@@ -43,7 +46,7 @@ const router = express.Router();
  *       400:
  *         description: Validation error or user already exists
  */
-router.post('/register', registerUser);
+router.post('/register', validate(registerSchema), registerUser);
 
 /**
  * @swagger
@@ -73,7 +76,7 @@ router.post('/register', registerUser);
  *       401:
  *         description: Invalid credentials
  */
-router.post('/login', loginUser);
+router.post('/login', validate(loginSchema), loginUser);
 
 /**
  * @swagger
@@ -85,7 +88,105 @@ router.post('/login', loginUser);
  *       200:
  *         description: List of users
  */
-router.get('/', getUsers);
+router.post('/refresh', refreshTokens);
+router.post('/logout', logoutUser);
+
+/**
+ * @swagger
+ * /api/users/dashboard:
+ *   get:
+ *     summary: Get dynamic dashboard statistics for the logged-in user
+ *     description: Demonstrates OpenAPI polymorphism based on query parameters.
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: detail
+ *         schema:
+ *           type: string
+ *           enum: [summary, comprehensive]
+ *           default: summary
+ *         description: Defines the level of detail in the response.
+ *     responses:
+ *       200:
+ *         description: Dashboard data retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               oneOf:
+ *                 - title: Summary Response
+ *                   type: object
+ *                   properties:
+ *                     status: 
+ *                       type: string
+ *                       example: success
+ *                     message:
+ *                       type: string
+ *                       example: Dashboard summary fetched successfully
+ *                     data:
+ *                       type: object
+ *                       properties:
+ *                         totalPending:
+ *                           type: integer
+ *                           example: 5
+ *                         totalCompleted:
+ *                           type: integer
+ *                           example: 12
+ *                 - title: Comprehensive Response
+ *                   type: object
+ *                   properties:
+ *                     status: 
+ *                       type: string
+ *                       example: success
+ *                     message:
+ *                       type: string
+ *                       example: Dashboard comprehensive data fetched successfully
+ *                     data:
+ *                       type: object
+ *                       properties:
+ *                         totalPending:
+ *                           type: integer
+ *                           example: 5
+ *                         totalCompleted:
+ *                           type: integer
+ *                           example: 12
+ *                         recentPending:
+ *                           type: array
+ *                           items:
+ *                             type: object
+ *                             properties:
+ *                               id: { type: string, example: "1" }
+ *                               title: { type: string, example: "Buy groceries" }
+ *                               isCompleted: { type: boolean, example: false }
+ *                               dueAt: { type: string, format: "date-time" }
+ *                         recentCompleted:
+ *                           type: array
+ *                           items:
+ *                             type: object
+ *                             properties:
+ *                               id: { type: string, example: "2" }
+ *                               title: { type: string, example: "Walk the dog" }
+ *                               isCompleted: { type: boolean, example: true }
+ *                               updatedAt: { type: string, format: "date-time" }
+ *       400:
+ *         description: Bad Request (Invalid Parameters)
+ *       401:
+ *         description: Unauthorized (Invalid or missing token)
+ */
+router.get('/dashboard', protect, getUserDashboard);
+
+/**
+ * @swagger
+ * /api/users/:
+ *   get:
+ *     summary: Get all users
+ *     tags: [Users]
+ *     responses:
+ *       200:
+ *         description: List of users
+ */
+router.get('/', protect, restrictTo('ADMIN'), getUsers);
 
 export default router;
 
