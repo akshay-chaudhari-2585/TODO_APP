@@ -70,9 +70,10 @@ const Game = () => {
         return prevState;
       });
 
-      if (state.players[newSocket.id] && state.players[newSocket.id].role !== myRole) {
-        setMyRole(state.players[newSocket.id].role);
-      }
+      setMyRole(prev => {
+        const newRole = state.players[newSocket.id]?.role;
+        return newRole && newRole !== prev ? newRole : prev;
+      });
     });
 
     newSocket.on('pong', (clientTime) => {
@@ -90,7 +91,7 @@ const Game = () => {
       newSocket.disconnect();
       if (pingInterval.current) clearInterval(pingInterval.current);
     };
-  }, [myRole]);
+  }, []);
 
   // Keyboard controls mapping
   useEffect(() => {
