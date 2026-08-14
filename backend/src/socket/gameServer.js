@@ -196,8 +196,8 @@ export const initGameServer = (httpServer) => {
         checkInfection();
         
         tickCount++;
-        // Throttle network updates: emit every 2 ticks (30 FPS network rate vs 60 FPS physics rate)
-        if (tickCount % 2 === 0) {
+        // Throttle network updates: emit every 3 ticks (20 FPS network rate vs 60 FPS physics rate)
+        if (tickCount % 3 === 0) {
           io.emit('game_state', gameState);
         }
       }
@@ -342,6 +342,10 @@ export const initGameServer = (httpServer) => {
     
     // Send maps to client
     socket.emit('init_config', { maps: MAPS });
+
+    socket.on('ping', (clientTime) => {
+      socket.emit('pong', clientTime);
+    });
 
 
     socket.on('join_game', () => {

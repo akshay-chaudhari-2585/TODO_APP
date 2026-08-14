@@ -10,11 +10,18 @@ const MAP_HEIGHT = 16;
 const CANVAS_WIDTH = MAP_WIDTH * TILE_SIZE;
 const CANVAS_HEIGHT = MAP_HEIGHT * TILE_SIZE;
 
-// Maps are loaded dynamically from the backend
+// Physics constants (Must match Server)
+const GRAVITY = 0.8;
+const JUMP_FORCE = -15; 
+const SPEED_SURVIVOR = 5;
+const SPEED_ZOMBIE = 6;
+const MAX_FALL_SPEED = 15;
+const PHYSICS_FPS = 60;
 
 const Game = () => {
   const navigate = useNavigate();
   const canvasRef = useRef(null);
+  const offscreenCanvasRef = useRef(document.createElement('canvas'));
   
   const [socket, setSocket] = useState(null);
   const [gameState, setGameState] = useState(null);
@@ -22,6 +29,13 @@ const Game = () => {
   const [maps, setMaps] = useState(null);
   const [error, setError] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [ping, setPing] = useState(0);
+
+  // Mutable refs for high-frequency physics/rendering
+  const playersRef = useRef({});
+  const myInputsRef = useRef({ left: false, right: false, jump: false });
+  const mapDrawnRef = useRef(false);
+  const pingInterval = useRef(null);
 
   // Connection
   useEffect(() => {
@@ -36,15 +50,47 @@ const Game = () => {
     });
 
     newSocket.on('game_state', (state) => {
-      setGameState(state);
-      if (state.players[newSocket.id]) {
+      // Sync authoritative state to refs immediately
+      playersRef.current = state.players || {};
+
+      // Only trigger a React render for UI elements to prevent lag
+      setGameState(prevState => {
+        if (!prevState || 
+            prevState.status !== state.status || 
+            prevState.timeLeft !== state.timeLeft ||
+            prevState.countdown !== state.countdown ||
+            prevState.infectionPending !== state.infectionPending ||
+            prevState.selectedMapIndex !== state.selectedMapIndex) {
+          
+          if (prevState && prevState.selectedMapIndex !== state.selectedMapIndex) {
+            mapDrawnRef.current = false; // Redraw offscreen map if map changes
+          }
+          return state;
+        }
+        return prevState;
+      });
+
+      if (state.players[newSocket.id] && state.players[newSocket.id].role !== myRole) {
         setMyRole(state.players[newSocket.id].role);
       }
     });
 
+    newSocket.on('pong', (clientTime) => {
+      setPing(Date.now() - clientTime);
+    });
+
+    pingInterval.current = setInterval(() => {
+      if (newSocket.connected) {
+        newSocket.emit('ping', Date.now());
+      }
+    }, 2000);
+
     setSocket(newSocket);
-    return () => newSocket.disconnect();
-  }, []);
+    return () => {
+      newSocket.disconnect();
+      if (pingInterval.current) clearInterval(pingInterval.current);
+    };
+  }, [myRole]);
 
   // Keyboard controls mapping
   useEffect(() => {
@@ -59,8 +105,8 @@ const Game = () => {
       if (e.key === 'ArrowRight' || e.key === 'd') key = 'right';
       if (e.key === 'ArrowUp' || e.key === 'w' || e.key === ' ') key = 'jump';
       
-      // Filter out auto-repeating keydowns
       if (key && (e.type === 'keyup' || !e.repeat)) {
+        myInputsRef.current[key] = state;
         socket.emit('input', { key, state });
       }
     };
@@ -76,38 +122,128 @@ const Game = () => {
     };
   }, [socket, gameState?.status]);
 
-  // Canvas Render Loop
+  // Canvas Render & Local Physics Loop
   useEffect(() => {
-    if (!canvasRef.current || !gameState) return;
+    if (!canvasRef.current || !gameState || !maps) return;
     const ctx = canvasRef.current.getContext('2d');
     
-    let animationFrameId;
-
-    const render = () => {
-      // Clear canvas
-      ctx.fillStyle = '#0f172a';
-      ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-
-      if (!maps) return;
+    // Prepare offscreen canvas for map
+    if (!mapDrawnRef.current) {
+      offscreenCanvasRef.current.width = CANVAS_WIDTH;
+      offscreenCanvasRef.current.height = CANVAS_HEIGHT;
+      const offCtx = offscreenCanvasRef.current.getContext('2d');
+      offCtx.fillStyle = '#0f172a';
+      offCtx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      
       const currentMap = maps[gameState.selectedMapIndex || 0];
-
-      // Draw Map
       for (let row = 0; row < MAP_HEIGHT; row++) {
         for (let col = 0; col < MAP_WIDTH; col++) {
           if (currentMap && currentMap[row] && currentMap[row][col] === 1) {
-            ctx.fillStyle = '#334155'; // Wall/Platform color
-            ctx.fillRect(col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-            // Draw subtle border for bricks
-            ctx.strokeStyle = '#1e293b';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            offCtx.fillStyle = '#334155';
+            offCtx.fillRect(col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            offCtx.strokeStyle = '#1e293b';
+            offCtx.lineWidth = 2;
+            offCtx.strokeRect(col * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE);
           }
         }
       }
+      mapDrawnRef.current = true;
+    }
+
+    const isSolid = (x, y, mapIndex) => {
+      const col = Math.floor(x / TILE_SIZE);
+      const row = Math.floor(y / TILE_SIZE);
+      if (row < 0 || row >= MAP_HEIGHT || col < 0 || col >= MAP_WIDTH) return true;
+      return maps[mapIndex][row][col] === 1;
+    };
+
+    const checkTileCollision = (player, dx, dy, mapIndex) => {
+      const testPoints = (px, py) => {
+        return (
+          isSolid(px, py, mapIndex) ||
+          isSolid(px + TILE_SIZE - 0.1, py, mapIndex) ||
+          isSolid(px, py + TILE_SIZE - 0.1, mapIndex) ||
+          isSolid(px + TILE_SIZE - 0.1, py + TILE_SIZE - 0.1, mapIndex)
+        );
+      };
+
+      if (dx !== 0) {
+        if (testPoints(player.x + dx, player.y)) {
+          if (dx > 0) player.x = Math.floor((player.x + dx + TILE_SIZE) / TILE_SIZE) * TILE_SIZE - TILE_SIZE;
+          else player.x = Math.floor((player.x + dx) / TILE_SIZE) * TILE_SIZE + TILE_SIZE;
+        } else {
+          player.x += dx;
+        }
+      }
+
+      if (dy !== 0) {
+        if (testPoints(player.x, player.y + dy)) {
+          if (dy > 0) {
+            player.y = Math.floor((player.y + dy + TILE_SIZE) / TILE_SIZE) * TILE_SIZE - TILE_SIZE;
+            player.vy = 0;
+          } else {
+            player.y = Math.floor((player.y + dy) / TILE_SIZE) * TILE_SIZE + TILE_SIZE;
+            player.vy = 0;
+          }
+        } else {
+          player.y += dy;
+        }
+      }
+    };
+
+    let lastTick = Date.now();
+    let animationFrameId;
+
+    const loop = () => {
+      const now = Date.now();
+      const dt = now - lastTick;
+      const mapIndex = gameState.selectedMapIndex || 0;
+
+      // Physics Prediction
+      if (gameState.status === 'playing' && dt >= 1000 / PHYSICS_FPS) {
+        Object.values(playersRef.current).forEach(player => {
+          if (player.id === socket?.id) {
+            // Local prediction
+            const speed = player.role === 'zombie' ? SPEED_ZOMBIE : SPEED_SURVIVOR;
+            player.vx = 0;
+            if (myInputsRef.current.left) player.vx = -speed;
+            if (myInputsRef.current.right) player.vx = speed;
+
+            player.vy += GRAVITY;
+            if (player.vy > MAX_FALL_SPEED) player.vy = MAX_FALL_SPEED;
+
+            const wasGrounded = isSolid(player.x, player.y + TILE_SIZE, mapIndex) || isSolid(player.x + TILE_SIZE - 0.1, player.y + TILE_SIZE, mapIndex);
+
+            if (myInputsRef.current.jump) {
+              if (wasGrounded && !player.jumpHeld) {
+                player.vy = JUMP_FORCE;
+                player.jumpHeld = true;
+              }
+            } else {
+              player.jumpHeld = false;
+            }
+
+            checkTileCollision(player, player.vx, 0, mapIndex);
+            checkTileCollision(player, 0, player.vy, mapIndex);
+
+            if (player.x < 0) player.x = 0;
+            if (player.x > CANVAS_WIDTH - TILE_SIZE) player.x = CANVAS_WIDTH - TILE_SIZE;
+            if (player.y > CANVAS_HEIGHT) {
+              player.y = 2 * TILE_SIZE;
+              player.vy = 0;
+            }
+          }
+          // Note: Opponent interpolates by just rendering at server provided position (snapping)
+          // For true interpolation, we'd lerp here, but visual snapping is okay for this simple prototype
+        });
+        lastTick = now;
+      }
+
+      // Draw Map (Blit offscreen canvas)
+      ctx.drawImage(offscreenCanvasRef.current, 0, 0);
 
       // Draw Players
-      Object.values(gameState.players).forEach(player => {
-        // Infection pending glow effect
+      Object.values(playersRef.current).forEach(player => {
         if (gameState.infectionPending) {
           ctx.shadowBlur = 20;
           ctx.shadowColor = 'yellow';
@@ -119,17 +255,15 @@ const Game = () => {
         ctx.fillStyle = player.color === 'green' ? '#22c55e' : '#3b82f6';
         ctx.fillRect(player.x, player.y, TILE_SIZE, TILE_SIZE);
         
-        ctx.shadowBlur = 0; // reset shadow
+        ctx.shadowBlur = 0; 
 
-        // Draw Player Emoji inside box
         ctx.fillStyle = 'white';
         ctx.font = '24px Arial';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         let emoji = player.role === 'zombie' ? '👹' : '😷';
-        ctx.fillText(emoji, player.x + TILE_SIZE/2, player.y + TILE_SIZE/2 + 2); // +2 for slight vertical adjustment
+        ctx.fillText(emoji, player.x + TILE_SIZE/2, player.y + TILE_SIZE/2 + 2); 
         
-        // Draw YOU label above if it's the current player
         if (player.id === socket?.id) {
             ctx.font = '12px Arial';
             ctx.textBaseline = 'bottom';
@@ -137,15 +271,15 @@ const Game = () => {
         }
       });
 
-      animationFrameId = requestAnimationFrame(render);
+      animationFrameId = requestAnimationFrame(loop);
     };
 
-    render();
+    loop();
 
     return () => {
       cancelAnimationFrame(animationFrameId);
     };
-  }, [gameState, socket, maps]);
+  }, [gameState?.status, socket, maps]);
 
   const joinGame = () => {
     if (socket) socket.emit('join_game');
@@ -162,7 +296,7 @@ const Game = () => {
           <h1 style={{ fontSize: '2rem', fontWeight: '800', background: 'linear-gradient(90deg, #22c55e, #3b82f6)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', margin: 0 }}>
             Infection (Zombie Tag)
           </h1>
-          <p style={{ color: 'var(--text-muted)' }}>Run. Hide. Survive.</p>
+          <p style={{ color: 'var(--text-muted)' }}>Ping: {ping}ms | Run. Hide. Survive.</p>
         </div>
         <Button variant="ghost" onClick={() => navigate('/')}>Back to Dashboard</Button>
       </header>
@@ -183,7 +317,6 @@ const Game = () => {
         </Card>
       ) : (
         <div style={{ width: '100%' }}>
-          {/* Scoreboard Overlay */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', padding: '1rem', backgroundColor: 'var(--surface-color)', borderRadius: '12px', border: '1px solid var(--border)' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
               <span style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>
@@ -212,7 +345,6 @@ const Game = () => {
             </div>
           </div>
 
-          {/* Canvas Game Board */}
           <div style={{ position: 'relative', width: `${CANVAS_WIDTH}px`, height: `${CANVAS_HEIGHT}px`, margin: '0 auto', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)', borderRadius: '12px', overflow: 'hidden', border: '4px solid #1e293b' }}>
             
             <canvas 
@@ -222,7 +354,6 @@ const Game = () => {
               style={{ display: 'block' }}
             />
 
-            {/* UI Overlays inside Canvas Container */}
             {gameState.status === 'waiting' && (
               <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(15, 23, 42, 0.8)', color: 'white', zIndex: 20 }}>
                 <h2 style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>Waiting for Opponent...</h2>
@@ -233,7 +364,7 @@ const Game = () => {
                     <h3 style={{ marginBottom: '1rem', color: '#fbbf24' }}>ZOMBIE PERK: CHOOSE THE MAP</h3>
                     <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
                       <Button variant="secondary" onClick={() => selectMap('prev')}>&larr; Prev Map</Button>
-                      <span style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>Map {gameState.selectedMapIndex + 1}</span>
+                      <span style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>Map {(gameState.selectedMapIndex || 0) + 1}</span>
                       <Button variant="secondary" onClick={() => selectMap('next')}>Next Map &rarr;</Button>
                     </div>
                   </div>
@@ -289,275 +420,3 @@ const Game = () => {
 };
 
 export default Game;
-
-// import React, { useState, useEffect, useRef } from 'react';
-// import { useNavigate } from 'react-router-dom';
-// import { io } from 'socket.io-client';
-// import Button from '../components/Button';
-// import Card from '../components/Card';
-
-// const CANVAS_WIDTH = 800;
-// const CANVAS_HEIGHT = 600;
-// const PLAYER_SIZE = 50;
-// const COIN_SIZE = 20;
-
-// const Game = () => {
-//   const navigate = useNavigate();
-//   const [socket, setSocket] = useState(null);
-//   const [gameState, setGameState] = useState(null);
-//   const [myColor, setMyColor] = useState(null);
-//   const [error, setError] = useState(null);
-//   const [isConnected, setIsConnected] = useState(false);
-
-//   useEffect(() => {
-//     // Connect to Socket.io server
-//     const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-//     const newSocket = io(backendUrl);
-
-//     newSocket.on('connect', () => {
-//       setIsConnected(true);
-//       setError(null);
-//     });
-
-//     newSocket.on('game_state', (state) => {
-//       setGameState(state);
-//       // Figure out my color from state based on socket id
-//       if (state.players[newSocket.id]) {
-//         setMyColor(state.players[newSocket.id].color);
-//       }
-//     });
-
-//     newSocket.on('error', (err) => {
-//       setError(err.message);
-//     });
-
-//     setSocket(newSocket);
-
-//     return () => {
-//       newSocket.disconnect();
-//     };
-//   }, []);
-
-//   // Keyboard controls
-//   useEffect(() => {
-//     if (!socket || !gameState || gameState.status !== 'playing') return;
-
-//     const handleKeyDown = (e) => {
-//       // Prevent default scrolling for arrow keys
-//       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
-//         e.preventDefault();
-//       }
-
-//       switch (e.key) {
-//         case 'ArrowUp':
-//         case 'w':
-//           socket.emit('move', 'up');
-//           break;
-//         case 'ArrowDown':
-//         case 's':
-//           socket.emit('move', 'down');
-//           break;
-//         case 'ArrowLeft':
-//         case 'a':
-//           socket.emit('move', 'left');
-//           break;
-//         case 'ArrowRight':
-//         case 'd':
-//           socket.emit('move', 'right');
-//           break;
-//         default:
-//           break;
-//       }
-//     };
-
-//     window.addEventListener('keydown', handleKeyDown);
-//     return () => window.removeEventListener('keydown', handleKeyDown);
-//   }, [socket, gameState?.status]);
-
-//   const joinGame = () => {
-//     if (socket) {
-//       socket.emit('join_game');
-//     }
-//   };
-
-//   return (
-//     <div style={{ padding: '2rem', maxWidth: '900px', margin: '0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-//       <header style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-//         <div>
-//           <h1 style={{ fontSize: '2rem', fontWeight: '800', background: 'linear-gradient(90deg, #f59e0b, #fbbf24)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', margin: 0 }}>
-//             Coin Collector
-//           </h1>
-//           <p style={{ color: 'var(--text-muted)' }}>Multiplayer Mini-Game</p>
-//         </div>
-//         <Button variant="ghost" onClick={() => navigate('/')}>Back to Dashboard</Button>
-//       </header>
-
-//       {error && (
-//         <div style={{ width: '100%', padding: '1rem', marginBottom: '1.5rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'var(--error)', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
-//           {error}
-//         </div>
-//       )}
-
-//       {!gameState || !myColor ? (
-//         <Card padding="lg" style={{ textAlign: 'center', width: '100%' }}>
-//           <h2>Ready to play?</h2>
-//           <p style={{ color: 'var(--text-muted)', marginBottom: '2rem' }}>Join the global lobby to play against someone else.</p>
-//           <Button variant="primary" size="lg" onClick={joinGame} disabled={!isConnected}>
-//             {isConnected ? 'Join Game' : 'Connecting...'}
-//           </Button>
-//         </Card>
-//       ) : (
-//         <div style={{ width: '100%' }}>
-//           {/* Scoreboard Overlay */}
-//           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', padding: '1rem', backgroundColor: 'var(--surface-color)', borderRadius: '12px', border: '1px solid var(--border)' }}>
-//             <div style={{ display: 'flex', gap: '2rem' }}>
-//               <div style={{ textAlign: 'center' }}>
-//                 <span style={{ color: '#3b82f6', fontWeight: '800', fontSize: '1.5rem', display: 'block' }}>BLUE</span>
-//                 <span style={{ fontSize: '2rem', fontWeight: 'bold' }}>
-//                   {Object.values(gameState.players).find(p => p.color === 'blue')?.score || 0}
-//                 </span>
-//               </div>
-//               <div style={{ textAlign: 'center' }}>
-//                 <span style={{ color: '#ef4444', fontWeight: '800', fontSize: '1.5rem', display: 'block' }}>RED</span>
-//                 <span style={{ fontSize: '2rem', fontWeight: 'bold' }}>
-//                   {Object.values(gameState.players).find(p => p.color === 'red')?.score || 0}
-//                 </span>
-//               </div>
-//             </div>
-
-//             <div style={{ textAlign: 'center' }}>
-//               <span style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.875rem', textTransform: 'uppercase' }}>Time Left</span>
-//               <span style={{ fontSize: '2.5rem', fontWeight: '800', color: gameState.timeLeft <= 10 ? 'var(--error)' : 'var(--text-main)' }}>
-//                 {gameState.timeLeft}s
-//               </span>
-//             </div>
-
-//             <div style={{ textAlign: 'right' }}>
-//               <span style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.875rem' }}>Status</span>
-//               <span style={{ fontWeight: 'bold', fontSize: '1.25rem', textTransform: 'uppercase', color: gameState.status === 'playing' ? 'var(--success)' : 'var(--accent-yellow)' }}>
-//                 {gameState.status}
-//               </span>
-//               {myColor && (
-//                 <div style={{ marginTop: '0.25rem', fontSize: '0.85rem' }}>
-//                   You are <span style={{ color: myColor === 'blue' ? '#3b82f6' : '#ef4444', fontWeight: 'bold' }}>{myColor.toUpperCase()}</span>
-//                 </div>
-//               )}
-//             </div>
-//           </div>
-
-//           {/* Game Board */}
-//           <div style={{
-//             position: 'relative',
-//             width: `${CANVAS_WIDTH}px`,
-//             height: `${CANVAS_HEIGHT}px`,
-//             backgroundColor: '#0f172a',
-//             borderRadius: '12px',
-//             overflow: 'hidden',
-//             margin: '0 auto',
-//             boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-//             border: '4px solid #1e293b'
-//           }}>
-//             {/* Render Coins */}
-//             {gameState.coins.map(coin => (
-//               <div
-//                 key={coin.id}
-//                 style={{
-//                   position: 'absolute',
-//                   left: `${coin.x}px`,
-//                   top: `${coin.y}px`,
-//                   width: `${COIN_SIZE}px`,
-//                   height: `${COIN_SIZE}px`,
-//                   backgroundColor: '#fbbf24',
-//                   borderRadius: '50%',
-//                   boxShadow: '0 0 15px #fbbf24, inset 0 0 5px #f59e0b',
-//                   transition: 'transform 0.2s',
-//                   transform: 'scale(1)',
-//                 }}
-//               />
-//             ))}
-
-//             {/* Render Bombs */}
-//             {gameState.bombs?.map(bomb => (
-//               <div
-//                 key={bomb.id}
-//                 style={{
-//                   position: 'absolute',
-//                   left: `${bomb.x}px`,
-//                   top: `${bomb.y}px`,
-//                   width: `${COIN_SIZE * 1.5}px`,
-//                   height: `${COIN_SIZE * 1.5}px`,
-//                   fontSize: '1.5rem',
-//                   display: 'flex',
-//                   alignItems: 'center',
-//                   justifyContent: 'center',
-//                   animation: 'pulse 1s infinite alternate',
-//                   zIndex: 5
-//                 }}
-//               >
-//                 💣
-//               </div>
-//             ))}
-
-//             {/* Render Players */}
-//             {Object.values(gameState.players).map(player => (
-//               <div
-//                 key={player.id}
-//                 style={{
-//                   position: 'absolute',
-//                   left: `${player.x}px`,
-//                   top: `${player.y}px`,
-//                   width: `${PLAYER_SIZE}px`,
-//                   height: `${PLAYER_SIZE}px`,
-//                   backgroundColor: player.color === 'blue' ? '#3b82f6' : '#ef4444',
-//                   borderRadius: '8px',
-//                   boxShadow: `0 0 20px ${player.color === 'blue' ? '#3b82f6' : '#ef4444'}`,
-//                   transition: 'all 0.05s linear', // smooth movement interpolation
-//                   zIndex: 10,
-//                   display: 'flex',
-//                   alignItems: 'center',
-//                   justifyContent: 'center',
-//                   color: 'white',
-//                   fontWeight: 'bold',
-//                   fontSize: '1.5rem'
-//                 }}
-//               >
-//                 {player.id === socket.id ? '😎' : ''}
-//               </div>
-//             ))}
-
-//             {gameState.status === 'waiting' && (
-//               <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(15, 23, 42, 0.8)', color: 'white', zIndex: 20 }}>
-//                 <h2 style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>Waiting for Opponent...</h2>
-//                 <div className="spinner" style={{ width: '40px', height: '40px', border: '4px solid rgba(255,255,255,0.1)', borderLeftColor: '#3b82f6', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
-//               </div>
-//             )}
-
-//             {gameState.status === 'finished' && (
-//               <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(15, 23, 42, 0.9)', color: 'white', zIndex: 20 }}>
-//                 <h1 style={{ fontSize: '4rem', marginBottom: '1rem', color: '#fbbf24' }}>TIME'S UP!</h1>
-//                 <h2 style={{ fontSize: '2rem' }}>
-//                   {Object.values(gameState.players).find(p => p.color === 'blue')?.score > Object.values(gameState.players).find(p => p.color === 'red')?.score ? 'BLUE WINS!' : 
-//                    Object.values(gameState.players).find(p => p.color === 'red')?.score > Object.values(gameState.players).find(p => p.color === 'blue')?.score ? 'RED WINS!' : 'TIE!'}
-//                 </h2>
-//                 <p style={{ marginTop: '2rem', color: '#94a3b8' }}>Starting a new game soon...</p>
-//               </div>
-//             )}
-//           </div>
-//           <p style={{ textAlign: 'center', color: 'var(--text-muted)', marginTop: '1rem' }}>Use WASD or Arrow Keys to move.</p>
-//         </div>
-//       )}
-      
-//       <style>{`
-//         @keyframes spin {
-//           to { transform: rotate(360deg); }
-//         }
-//         @keyframes pulse {
-//           0% { transform: scale(1); filter: drop-shadow(0 0 5px red); }
-//           100% { transform: scale(1.2); filter: drop-shadow(0 0 15px red); }
-//         }
-//       `}</style>
-//     </div>
-//   );
-// };
-
-// export default Game;
