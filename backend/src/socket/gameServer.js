@@ -189,11 +189,17 @@ export const initGameServer = (httpServer) => {
       }
     }, 1000);
 
+    let tickCount = 0;
     gameLoopInterval = setInterval(() => {
       if (gameState.status === 'playing') {
         updatePhysics();
         checkInfection();
-        io.emit('game_state', gameState);
+        
+        tickCount++;
+        // Throttle network updates: emit every 2 ticks (30 FPS network rate vs 60 FPS physics rate)
+        if (tickCount % 2 === 0) {
+          io.emit('game_state', gameState);
+        }
       }
     }, 1000 / FPS);
   };
