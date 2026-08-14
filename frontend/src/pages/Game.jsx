@@ -11,10 +11,10 @@ const CANVAS_WIDTH = MAP_WIDTH * TILE_SIZE;
 const CANVAS_HEIGHT = MAP_HEIGHT * TILE_SIZE;
 
 // Physics constants (Must match Server)
-const GRAVITY = 0.8;
+const GRAVITY = 0.6;
 const JUMP_FORCE = -15; 
 const SPEED_SURVIVOR = 5;
-const SPEED_ZOMBIE = 6;
+const SPEED_ZOMBIE = 5; // Updated to 5 as requested
 const MAX_FALL_SPEED = 15;
 const PHYSICS_FPS = 60;
 
@@ -50,8 +50,24 @@ const Game = () => {
     });
 
     newSocket.on('game_state', (state) => {
-      // Sync authoritative state to refs immediately
-      playersRef.current = state.players || {};
+      // The server is the absolute final truth for physics coordinates
+      const newPlayers = state.players || {};
+      
+      Object.keys(newPlayers).forEach(id => {
+        const existingPlayer = playersRef.current[id];
+        if (existingPlayer) {
+          // Keep our local inputs running, but accept the server's physics coordinates
+          newPlayers[id].inputs = existingPlayer.inputs;
+          // Crucially, preserve the current VISUAL coordinates so they don't snap
+          newPlayers[id].visualX = existingPlayer.visualX !== undefined ? existingPlayer.visualX : existingPlayer.x;
+          newPlayers[id].visualY = existingPlayer.visualY !== undefined ? existingPlayer.visualY : existingPlayer.y;
+        } else {
+          newPlayers[id].visualX = newPlayers[id].x;
+          newPlayers[id].visualY = newPlayers[id].y;
+        }
+      });
+
+      playersRef.current = newPlayers;
 
       // Only trigger a React render for UI elements to prevent lag
       setGameState(prevState => {
@@ -200,11 +216,11 @@ const Game = () => {
       const dt = now - lastTick;
       const mapIndex = gameState.selectedMapIndex || 0;
 
-      // Physics Prediction
+      // Physics Prediction & Visual Interpolation
       if (gameState.status === 'playing' && dt >= 1000 / PHYSICS_FPS) {
         Object.values(playersRef.current).forEach(player => {
           if (player.id === socket?.id) {
-            // Local prediction
+            // Local prediction: keep moving based on local inputs between 10 FPS server updates
             const speed = player.role === 'zombie' ? SPEED_ZOMBIE : SPEED_SURVIVOR;
             player.vx = 0;
             if (myInputsRef.current.left) player.vx = -speed;
@@ -234,42 +250,32 @@ const Game = () => {
               player.vy = 0;
             }
           }
-          // Note: Opponent interpolates by just rendering at server provided position (snapping)
-          // For true interpolation, we'd lerp here, but visual snapping is okay for this simple prototype
+          
+          // Visual Interpolation for EVERYONE
+          // This smoothly glides the camera/visuals toward the true physics coordinates, hiding any snapping
+          if (player.visualX === undefined || player.visualY === undefined) {
+            player.visualX = player.x;
+            player.visualY = player.y;
+          } else {
+            // 0.3 factor creates a fast, smooth glide
+            player.visualX += (player.x - player.visualX) * 0.3;
+            player.visualY += (player.y - player.visualY) * 0.3;
+          }
         });
         lastTick = now;
       }
-
       // Draw Map (Blit offscreen canvas)
       ctx.drawImage(offscreenCanvasRef.current, 0, 0);
 
       // Draw Players
       Object.values(playersRef.current).forEach(player => {
-        if (gameState.infectionPending) {
-          ctx.shadowBlur = 20;
-          ctx.shadowColor = 'yellow';
-        } else {
-          ctx.shadowBlur = 10;
-          ctx.shadowColor = player.color === 'green' ? '#22c55e' : '#3b82f6';
-        }
-
-        ctx.fillStyle = player.color === 'green' ? '#22c55e' : '#3b82f6';
-        ctx.fillRect(player.x, player.y, TILE_SIZE, TILE_SIZE);
-        
-        ctx.shadowBlur = 0; 
-
+        // Render using interpolated visual coordinates
         ctx.fillStyle = 'white';
-        ctx.font = '24px Arial';
+        ctx.font = `${TILE_SIZE * 0.8}px Arial`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         let emoji = player.role === 'zombie' ? '👹' : '😷';
-        ctx.fillText(emoji, player.x + TILE_SIZE/2, player.y + TILE_SIZE/2 + 2); 
-        
-        if (player.id === socket?.id) {
-            ctx.font = '12px Arial';
-            ctx.textBaseline = 'bottom';
-            ctx.fillText('YOU', player.x + TILE_SIZE/2, player.y - 5);
-        }
+        ctx.fillText(emoji, player.visualX + TILE_SIZE / 2, player.visualY + TILE_SIZE / 2 + 2); 
       });
 
       animationFrameId = requestAnimationFrame(loop);

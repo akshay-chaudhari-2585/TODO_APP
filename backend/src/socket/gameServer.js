@@ -95,10 +95,10 @@ async function loadGameConfig() {
 loadGameConfig();
 
 // Physics constants
-const GRAVITY = 0.8;
-const JUMP_FORCE = -15; // Tuned for 2 block height jump
+const GRAVITY = 0.6;
+const JUMP_FORCE = -15; 
 const SPEED_SURVIVOR = 5;
-const SPEED_ZOMBIE = 6;
+const SPEED_ZOMBIE = 5; // Or keep it 6? The sandbox used 5 for the player. Let's make both 5 for consistency with the sandbox.
 const MAX_FALL_SPEED = 15;
 
 export const initGameServer = (httpServer) => {
@@ -196,8 +196,8 @@ export const initGameServer = (httpServer) => {
         checkInfection();
         
         tickCount++;
-        // Throttle network updates: emit every 3 ticks (20 FPS network rate vs 60 FPS physics rate)
-        if (tickCount % 3 === 0) {
+        // Emit game state at 10 FPS (every 6 ticks) as final truth
+        if (tickCount % 6 === 0) {
           io.emit('game_state', gameState);
         }
       }
