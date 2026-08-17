@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Home from './pages/Home';
@@ -8,7 +8,7 @@ import TaskForm from './pages/TaskForm';
 import AdminRoute from './components/AdminRoute';
 import AdminDashboard from './pages/AdminDashboard';
 import Game from './pages/Game';
-
+import Chess from './pages/Chess';
 function App() {
   return (
     <AuthProvider>
@@ -37,6 +37,11 @@ function App() {
           <Route path="/game" element={
             <ProtectedRoute>
               <Game />
+            </ProtectedRoute>
+          } />
+          <Route path="/chess" element={
+            <ProtectedRoute>
+              <Chess />
             </ProtectedRoute>
           } />
           <Route path="/login" element={<Login />} />

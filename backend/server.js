@@ -12,6 +12,7 @@ import { errorHandler } from './src/middleware/errorHandler.js';
 import { successResponse, errorResponse } from './src/utils/apiResponse.js';
 import { requestLogger } from './src/middleware/loggerMiddleware.js';
 import { initGameServer } from './src/socket/gameServer.js';
+import { initChessServer } from './src/socket/chessServer.js';
 
 dotenv.config();
 
@@ -21,6 +22,7 @@ const PORT = process.env.PORT || 5000;
 
 // Initialize Socket.io Game Server
 const io = initGameServer(server);
+initChessServer(io);
 app.set('io', io);
 
 app.use(cors());

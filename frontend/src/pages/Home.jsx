@@ -79,6 +79,7 @@ const Home = () => {
           {user?.role === 'ADMIN' && (
             <Button variant="secondary" onClick={() => navigate('/admin')}>Admin Panel</Button>
           )}
+          <Button variant="ghost" onClick={() => navigate('/chess')} style={{ color: '#60a5fa', borderColor: '#60a5fa' }}>♟️ Play Chess</Button>
           <Button variant="ghost" onClick={() => navigate('/game')} style={{ color: '#fbbf24', borderColor: '#fbbf24' }}>🎮 Mini-Game</Button>
           <Button variant="primary" onClick={() => navigate('/task/new')}>+ Create Task</Button>
           <Button variant="ghost" onClick={logout}>Logout</Button>
