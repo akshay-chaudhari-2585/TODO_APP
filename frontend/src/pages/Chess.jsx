@@ -13,8 +13,14 @@ export default function ChessPage() {
   const [socket, setSocket] = useState(null);
   const [optionSquares, setOptionSquares] = useState({});
   const [moveFrom, setMoveFrom] = useState("");
-  const [whiteTime, setWhiteTime] = useState(600);
-  const [blackTime, setBlackTime] = useState(600);
+  const [timers, setTimers] = useState({
+    w: 600000,
+    b: 600000,
+    lastMoveTime: null,
+    serverTimeOffset: 0,
+    turn: 'w'
+  });
+  const [displayTimers, setDisplayTimers] = useState({ w: 600, b: 600 });
 
   // Refs to fix stale closures in react-chessboard callbacks
   const gameRef = React.useRef(game);
@@ -39,16 +45,21 @@ export default function ChessPage() {
       console.log("[SOCKET] Received chess_state:", state);
       if (state.fen) {
         setGame(new Chess(state.fen));
-        if (
-          state.fen ===
-          "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
-        ) {
-          setWhiteTime(600);
-          setBlackTime(600);
-        }
       }
       if (state.role) {
         setRole(state.role);
+      }
+      if (state.whiteTime !== undefined) {
+        setTimers({
+          w: state.whiteTime,
+          b: state.blackTime,
+          lastMoveTime: state.lastMoveTime,
+          serverTimeOffset: Date.now() - (state.serverTime || Date.now()),
+          turn: state.turn || 'w'
+        });
+      }
+      if (state.opponentDisconnected) {
+        alert("Opponent disconnected!");
       }
     });
 
@@ -56,21 +67,26 @@ export default function ChessPage() {
   }, []);
 
   useEffect(() => {
-    let interval;
-    const isGameActive =
-      !game.isGameOver() &&
-      game.fen() !== "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-    if (isGameActive && role !== "waiting") {
-      interval = setInterval(() => {
-        if (game.turn() === "w") {
-          setWhiteTime((prev) => (prev > 0 ? prev - 1 : 0));
-        } else {
-          setBlackTime((prev) => (prev > 0 ? prev - 1 : 0));
-        }
-      }, 1000);
-    }
+    const interval = setInterval(() => {
+      const { w, b, lastMoveTime, serverTimeOffset, turn } = timers;
+      if (!lastMoveTime || game.isGameOver() || role === "waiting") {
+        setDisplayTimers({
+          w: Math.floor(Math.max(0, w) / 1000),
+          b: Math.floor(Math.max(0, b) / 1000),
+        });
+        return;
+      }
+      
+      const now = Date.now() - serverTimeOffset;
+      const elapsed = now - lastMoveTime;
+      
+      setDisplayTimers({
+        w: Math.floor(Math.max(0, turn === 'w' ? w - elapsed : w) / 1000),
+        b: Math.floor(Math.max(0, turn === 'b' ? b - elapsed : b) / 1000),
+      });
+    }, 250); // fast local tick for smooth display
     return () => clearInterval(interval);
-  }, [game, role]);
+  }, [timers, game.isGameOver(), role]);
 
   const formatTime = (time) => {
     const mins = Math.floor(time / 60);
@@ -298,28 +314,16 @@ export default function ChessPage() {
             )}
           </div>
 
-          <div className="chess-status-card" style={{ marginTop: "1rem" }}>
-            <h2 className="chess-status-header">Timers</h2>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                fontSize: "1.2rem",
-                fontWeight: "bold",
-                padding: "0.5rem 1rem",
-              }}
-            >
-              <div
-                style={{ color: game.turn() === "w" ? "#ef4444" : "inherit" }}
-              >
-                White: {formatTime(whiteTime)}
-              </div>
-              <div
-                style={{ color: game.turn() === "b" ? "#ef4444" : "inherit" }}
-              >
-                Black: {formatTime(blackTime)}
-              </div>
-            </div>
+          <div className="chess-status-card" style={{ marginTop: '1rem' }}>
+             <h2 className="chess-status-header">Timers</h2>
+             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.2rem', fontWeight: 'bold', padding: '0.5rem 1rem' }}>
+               <div style={{ color: game.turn() === 'w' ? '#ef4444' : 'inherit' }}>
+                  White: {formatTime(displayTimers.w)}
+               </div>
+               <div style={{ color: game.turn() === 'b' ? '#ef4444' : 'inherit' }}>
+                  Black: {formatTime(displayTimers.b)}
+               </div>
+             </div>
           </div>
 
           {game.isGameOver() && (
